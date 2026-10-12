@@ -4,6 +4,7 @@ import handcalc.data_access.FileHistoryRepository;
 import handcalc.data_access.FileSampleRepository;
 import handcalc.data_access.NeuralModelTrainer;
 import handcalc.data_access.ReplaceableClassifier;
+import handcalc.data_access.RetrainingSampleRepository;
 import handcalc.data_access.SymbolTemplates;
 import handcalc.interface_adapter.CalculatorViewModel;
 import handcalc.interface_adapter.CollectSampleController;
@@ -27,6 +28,8 @@ import handcalc.use_case.correct_symbol.CorrectSymbolInteractor;
 import handcalc.use_case.correct_symbol.SampleRepository;
 import handcalc.use_case.history.HistoryRecorder;
 import handcalc.use_case.history.ShowHistoryInteractor;
+import handcalc.use_case.recognize_and_solve.CalculationRecorder;
+import handcalc.use_case.recognize_and_solve.DistinctCalculationRecorder;
 import handcalc.use_case.recognize_and_solve.GlyphSegmenter;
 import handcalc.use_case.recognize_and_solve.RecognizeAndSolveInteractor;
 import handcalc.use_case.train_model.TrainModelInteractor;
@@ -54,6 +57,8 @@ public final class CalculatorApp {
     private static final String MODEL_FILE_NAME = "model.bin";
     private static final String HISTORY_FILE_NAME = "history.jsonl";
     private static final int SAMPLES_WANTED_PER_SYMBOL = 20;
+    /** How long after the last correction the model is retrained on all samples. */
+    private static final long RETRAIN_DELAY_MS = 1500;
 
     private final CalculatorViewModel viewModel = new CalculatorViewModel();
     private final CollectorViewModel collectorViewModel = new CollectorViewModel();
@@ -76,16 +81,20 @@ public final class CalculatorApp {
      * {@code history.jsonl}, both next to the samples file.
      */
     public CalculatorApp(Path samplesFile) {
-        SampleRepository repository = new FileSampleRepository(samplesFile);
+        SampleRepository stored = new FileSampleRepository(samplesFile);
         ReplaceableClassifier classifier = new ReplaceableClassifier();
         NeuralModelTrainer trainer = new NeuralModelTrainer(
                 classifier, samplesFile.resolveSibling(MODEL_FILE_NAME));
-        trainer.initialize(repository.loadAll());
+        trainer.initialize(stored.loadAll());
+        SampleRepository repository =
+                new RetrainingSampleRepository(stored, trainer, RETRAIN_DELAY_MS);
 
         GlyphSegmenter segmenter = new GlyphSegmenter();
         FileHistoryRepository history =
                 new FileHistoryRepository(samplesFile.resolveSibling(HISTORY_FILE_NAME));
-        HistoryRecorder recorder = new HistoryRecorder(history, Clock.systemUTC());
+        // a page is read again at every pause: only new calculations go into the history
+        CalculationRecorder recorder = new DistinctCalculationRecorder(
+                new HistoryRecorder(history, Clock.systemUTC()));
 
         RecognizeAndSolvePresenter presenter = new RecognizeAndSolvePresenter(viewModel);
         controller = new RecognizeAndSolveController(
@@ -128,7 +137,7 @@ public final class CalculatorApp {
 
     /** @param openCollector what the "Collect samples" button does; null hides the button */
     public CalculatorView createView(Runnable openCollector) {
-        return new CalculatorView(controller, correctController, viewModel, openCollector);
+        return new CalculatorView(controller, viewModel, openCollector);
     }
 
     public CollectorView createCollectorView() {

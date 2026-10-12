@@ -25,7 +25,7 @@ public final class Expression {
         double value = parser.parseExpression();
         parser.expectEnd();
         if (Double.isNaN(value) || Double.isInfinite(value)) {
-            throw new InvalidExpressionException("Result is not a finite number");
+            throw InvalidExpressionException.undefined("Result is not a finite number");
         }
         return value;
     }
@@ -73,7 +73,7 @@ public final class Expression {
                     pos++;
                     double right = parseUnary();
                     if (right == 0) {
-                        throw new InvalidExpressionException("Division by zero");
+                        throw InvalidExpressionException.undefined("Division by zero");
                     }
                     value /= right;
                 } else if (startsPrimary(c)) {
@@ -104,10 +104,11 @@ public final class Expression {
         private double parsePrimary() throws InvalidExpressionException {
             char c = peek();
             if (c == '(') {
-                pos++;
+                int open = pos++;
                 double value = parseExpression();
                 if (peek() != ')') {
-                    throw new InvalidExpressionException("Missing closing parenthesis");
+                    throw new InvalidExpressionException("Missing closing parenthesis",
+                            open, open + 1);
                 }
                 pos++;
                 return value;
@@ -116,7 +117,7 @@ public final class Expression {
                 pos++;
                 double radicand = parseUnary();
                 if (radicand < 0) {
-                    throw new InvalidExpressionException("Square root of a negative number");
+                    throw InvalidExpressionException.undefined("Square root of a negative number");
                 }
                 return Math.sqrt(radicand);
             }
@@ -132,9 +133,12 @@ public final class Expression {
                 return parseFunction();
             }
             if (c == END) {
-                throw new InvalidExpressionException("Expression ended unexpectedly");
+                // the last symbol is the one left without what should follow it
+                int last = input.length() - 1;
+                throw new InvalidExpressionException("Expression ended unexpectedly",
+                        last, last < 0 ? -1 : input.length());
             }
-            throw new InvalidExpressionException("Unexpected symbol '" + c + "'");
+            throw new InvalidExpressionException("Unexpected symbol '" + c + "'", pos, pos + 1);
         }
 
         private double parseFunction() throws InvalidExpressionException {
@@ -145,7 +149,8 @@ public final class Expression {
             }
             String name = input.substring(start, pos);
             if (!name.equals("sin") && !name.equals("cos") && !name.equals("tan")) {
-                throw new InvalidExpressionException("Unknown function '" + name + "'");
+                throw new InvalidExpressionException("Unknown function '" + name + "'",
+                        start, pos);
             }
             int piBefore = piCount;
             double argument = peek() == '(' ? parsePrimary() : parsePower();
@@ -158,7 +163,7 @@ public final class Expression {
                     return Math.cos(radians);
                 default:
                     if (Math.abs(Math.cos(radians)) < 1e-12) {
-                        throw new InvalidExpressionException(
+                        throw InvalidExpressionException.undefined(
                                 "tan(" + format(argument) + ") is undefined");
                     }
                     return Math.tan(radians);
@@ -174,7 +179,8 @@ public final class Expression {
             try {
                 return Double.parseDouble(number);
             } catch (NumberFormatException e) {
-                throw new InvalidExpressionException("Invalid number '" + number + "'");
+                throw new InvalidExpressionException("Invalid number '" + number + "'",
+                        start, pos);
             }
         }
 
@@ -182,9 +188,11 @@ public final class Expression {
             if (pos < input.length()) {
                 char c = input.charAt(pos);
                 if (c == ')') {
-                    throw new InvalidExpressionException("Unmatched closing parenthesis");
+                    throw new InvalidExpressionException("Unmatched closing parenthesis",
+                            pos, pos + 1);
                 }
-                throw new InvalidExpressionException("Unexpected symbol '" + c + "'");
+                throw new InvalidExpressionException("Unexpected symbol '" + c + "'",
+                        pos, pos + 1);
             }
         }
 

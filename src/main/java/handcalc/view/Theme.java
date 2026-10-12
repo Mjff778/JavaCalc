@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Font;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JToggleButton;
 import javax.swing.UIManager;
 
 /**
@@ -56,6 +57,27 @@ public final class Theme {
                         + "background: #FFFFFF; borderColor: #D2D2D7;"
                         + "hoverBackground: #F5F5F7; pressedBackground: #E8E8ED");
         button.setFont(font(Font.PLAIN, 14f));
+        return button;
+    }
+
+    /** Quiet outlined button that stays tinted while it is switched on. */
+    public static JToggleButton toggle(JToggleButton button) {
+        button.putClientProperty("FlatLaf.style",
+                "arc: 999; focusWidth: 0; margin: 8,18,8,18;"
+                        + "background: #FFFFFF; borderColor: #D2D2D7;"
+                        + "hoverBackground: #F5F5F7; pressedBackground: #E8E8ED;"
+                        + "selectedBackground: #ECEBFE; selectedForeground: #4F46E5");
+        button.setFont(font(Font.PLAIN, 14f));
+        return button;
+    }
+
+    /** A chip that stands out from the others: the choice already made. */
+    public static JButton currentChip(JButton button) {
+        button.putClientProperty("FlatLaf.style",
+                "arc: 14; borderWidth: 0; focusWidth: 0; margin: 4,14,4,14;"
+                        + "background: #4F46E5; foreground: #FFFFFF;"
+                        + "hoverBackground: #4338CA; pressedBackground: #3730A3");
+        button.setFont(font(Font.BOLD, 20f));
         return button;
     }
 

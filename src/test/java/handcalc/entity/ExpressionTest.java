@@ -1,7 +1,9 @@
 package handcalc.entity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -177,5 +179,35 @@ class ExpressionTest {
         assertValue(0, "sinπ");
         assertValue(-1, "cosπ");
         assertValue(-2, "2cosπ");
+    }
+
+    private static InvalidExpressionException failure(String text) {
+        return assertThrows(InvalidExpressionException.class, () -> eval(text));
+    }
+
+    private static void assertSpan(String text, int start, int end) {
+        InvalidExpressionException e = failure(text);
+        assertFalse(e.isUndefined(), e.getMessage());
+        assertEquals(start, e.getStart(), "start of the fault in " + text);
+        assertEquals(end, e.getEnd(), "end of the fault in " + text);
+    }
+
+    @Test
+    void writingErrorsPointAtTheSymbolsAtFault() {
+        assertSpan("5+", 1, 2);
+        assertSpan("5+×3", 2, 3);
+        assertSpan("2×(3+4", 2, 3);
+        assertSpan("2+3)", 3, 4);
+        assertSpan("2+abc(1)", 2, 5);
+        assertSpan("1.2.3+1", 0, 5);
+    }
+
+    @Test
+    void mathematicallyUndefinedResultsAreNotWritingErrors() {
+        for (String text : new String[] {"5÷0", "√(0-4)", "tan(90)"}) {
+            InvalidExpressionException e = failure(text);
+            assertTrue(e.isUndefined(), text);
+            assertFalse(e.hasPosition(), text);
+        }
     }
 }

@@ -16,4 +16,25 @@ public interface RecognizeAndSolveOutputBoundary {
      */
     void prepareFailView(String recognizedExpression, String errorMessage,
                          List<SymbolReading> readings);
+
+    /** Like the other fail view, with the symbols at fault and where an answer would go. */
+    default void prepareFailView(RecognizeAndSolveFailureData failure) {
+        prepareFailView(failure.getExpression(), failure.getMessage(), failure.getReadings());
+    }
+
+    /**
+     * The writing was read but not solved, because it does not end in "=" yet.
+     *
+     * @param readings how each symbol was read, so the user can correct a misreading
+     */
+    default void prepareUnfinishedView(List<SymbolReading> readings) {
+    }
+
+    /**
+     * A whole page was read line by line; each line that ends in "=" was solved.
+     *
+     * @param lines what became of each line, from the top line down
+     */
+    default void preparePageView(List<LineResult> lines) {
+    }
 }

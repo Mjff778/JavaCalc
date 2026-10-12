@@ -2,7 +2,8 @@ package handcalc.use_case.recognize_and_solve;
 
 /**
  * Splits the written strokes into symbols, reads each one, and evaluates the resulting
- * arithmetic expression.
+ * arithmetic expression. When waiting for "=", the writing is a page: each line is read and,
+ * once it ends in "=", solved on its own.
  */
 public class RecognizeAndSolveInteractor implements RecognizeAndSolveInputBoundary {
 
@@ -23,6 +24,10 @@ public class RecognizeAndSolveInteractor implements RecognizeAndSolveInputBounda
 
     @Override
     public void execute(RecognizeAndSolveInputData inputData) {
-        solver.solve(reader.read(inputData.getStrokes()));
+        if (inputData.isWaitForEquals()) {
+            solver.solvePage(reader.readPage(inputData.getStrokes(), inputData.getPlaced()));
+        } else {
+            solver.solve(reader.read(inputData.getStrokes()));
+        }
     }
 }

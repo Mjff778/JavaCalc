@@ -4,6 +4,8 @@ import handcalc.entity.Glyph;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Turns recognized symbols and where they sit on the page into a one-line expression:
@@ -16,6 +18,9 @@ import java.util.List;
  * </ul>
  * Letters that almost spell sin, cos or tan are corrected, because "c" looks like "(",
  * "o" like "0" and "s" like "5".
+ *
+ * <p>Every character of the line remembers which written symbol it came from, so that a
+ * mistake found in the line can be pointed out in the handwriting.
  */
 public final class MathLayout {
 
@@ -32,11 +37,71 @@ public final class MathLayout {
 
     /** @param readings the recognized symbols with their position on the page */
     public static String toLinear(List<SymbolReading> readings) {
+        return layOut(readings).getText();
+    }
+
+    /** @param readings the recognized symbols with their position on the page */
+    public static Line layOut(List<SymbolReading> readings) {
         List<Node> nodes = new ArrayList<>();
-        for (SymbolReading reading : readings) {
-            nodes.add(Node.symbol(reading.getSymbol(), reading.getGlyph()));
+        for (int i = 0; i < readings.size(); i++) {
+            SymbolReading reading = readings.get(i);
+            nodes.add(Node.symbol(reading.getSymbol(), reading.getGlyph(), i));
         }
-        return repairFunctionNames(linear(group(nodes)));
+        Traced line = repairFunctionNames(linear(group(nodes)));
+        int[] sources = new int[line.length()];
+        for (int i = 0; i < sources.length; i++) {
+            sources[i] = line.sources.get(i);
+        }
+        return new Line(line.toString(), sources);
+    }
+
+    /** The expression on one line, and which written symbol each character came from. */
+    public static final class Line {
+        private final String text;
+        private final int[] sources;
+
+        private Line(String text, int[] sources) {
+            this.text = text;
+            this.sources = sources;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        /**
+         * @return the index of the reading the character at {@code index} was written as, or
+         *         -1 if the layout added it (such as the brackets around a fraction)
+         */
+        public int sourceAt(int index) {
+            return sources[index];
+        }
+
+        /**
+         * @return the indices of the readings that the characters from {@code start} up to
+         *         (excluding) {@code end} were written as; if those characters were all added
+         *         by the layout (such as the brackets of a fraction), the nearest written
+         *         symbol before them, or after them
+         */
+        public Set<Integer> readingsIn(int start, int end) {
+            Set<Integer> found = new TreeSet<>();
+            for (int i = Math.max(0, start); i < Math.min(end, sources.length); i++) {
+                if (sources[i] >= 0) {
+                    found.add(sources[i]);
+                }
+            }
+            for (int i = Math.min(start, sources.length) - 1; found.isEmpty() && i >= 0; i--) {
+                if (sources[i] >= 0) {
+                    found.add(sources[i]);
+                }
+            }
+            for (int i = Math.max(0, end); found.isEmpty() && i < sources.length; i++) {
+                if (sources[i] >= 0) {
+                    found.add(sources[i]);
+                }
+            }
+            return found;
+        }
     }
 
     // ---- structure: fractions and roots --------------------------------------------------
@@ -83,7 +148,8 @@ public final class MathLayout {
         remaining.remove(bar);
         remaining.removeAll(above);
         remaining.removeAll(below);
-        String text = "(" + wrap(linear(group(above))) + "÷" + wrap(linear(group(below))) + ")";
+        Traced text = Traced.added("(").append(wrap(linear(group(above))))
+                .append('÷', bar.source).append(wrap(linear(group(below)))).append(Traced.added(")"));
         return Node.composite(text, Node.Kind.FRACTION, bar, above, below);
     }
 
@@ -100,14 +166,14 @@ public final class MathLayout {
         }
         remaining.remove(root);
         remaining.removeAll(inside);
-        String text = "√" + wrap(linear(group(inside)));
+        Traced text = new Traced().append('√', root.source).append(wrap(linear(group(inside))));
         return Node.composite(text, Node.Kind.RADICAL, root, inside, new ArrayList<>());
     }
 
     // ---- one line: numbers, exponents ----------------------------------------------------
 
     /** Reads grouped nodes (sorted left to right) as a single line. */
-    private static String linear(List<Node> nodes) {
+    private static Traced linear(List<Node> nodes) {
         List<Token> tokens = new ArrayList<>();
         int i = 0;
         while (i < nodes.size()) {
@@ -135,24 +201,25 @@ public final class MathLayout {
             }
             i++;
         }
-        StringBuilder text = new StringBuilder();
+        Traced text = new Traced();
         for (Token token : tokens) {
             // "2³" then "4", or "√4" then "5": written side by side they would read as one
             // number ("2^34", "√45"), so the multiplication is made explicit
             if (text.length() > 0 && isDigitLike(text.charAt(text.length() - 1))
                     && isDigitLike(token.text.charAt(0))) {
-                text.append('×');
+                text.append('×', Traced.ADDED);
             }
             text.append(token.text);
         }
-        return text.toString();
+        return text;
     }
 
     // ---- helpers -------------------------------------------------------------------------
 
     /** Puts brackets around anything that is more than a single number, symbol or group. */
-    private static String wrap(String text) {
-        return isAtomic(text) ? text : "(" + text + ")";
+    private static Traced wrap(Traced text) {
+        return isAtomic(text.toString())
+                ? text : Traced.added("(").append(text).append(Traced.added(")"));
     }
 
     private static boolean isAtomic(String text) {
@@ -182,8 +249,8 @@ public final class MathLayout {
      * the context gives away: a "c" right after a function name is its opening bracket, and
      * an "o", "i" or "s" touching a digit is a 0, 1 or 5.
      */
-    private static String repairFunctionNames(String text) {
-        StringBuilder result = new StringBuilder();
+    private static Traced repairFunctionNames(Traced text) {
+        Traced result = new Traced();
         List<Boolean> inName = new ArrayList<>();
         int i = 0;
         while (i < text.length()) {
@@ -194,18 +261,18 @@ public final class MathLayout {
                 }
             }
             if (name != null) {
-                result.append(name);
                 for (int k = 0; k < 3; k++) {
+                    result.append(name.charAt(k), text.sources.get(i + k));
                     inName.add(true);
                 }
                 i += 3;
                 if (i < text.length() && text.charAt(i) == 'c') {
-                    result.append('(');
+                    result.append('(', text.sources.get(i));
                     inName.add(false);
                     i++;
                 }
             } else {
-                result.append(text.charAt(i));
+                result.append(text.charAt(i), text.sources.get(i));
                 inName.add(false);
                 i++;
             }
@@ -219,10 +286,10 @@ public final class MathLayout {
             boolean nextToDigit = (k > 0 && isDigitLike(result.charAt(k - 1)))
                     || (k + 1 < result.length() && isDigitLike(result.charAt(k + 1)));
             if (digit >= 0 && nextToDigit) {
-                result.setCharAt(k, "015".charAt(digit));
+                result.text.setCharAt(k, "015".charAt(digit));
             }
         }
-        return result.toString();
+        return result;
     }
 
     private static boolean isDigitLike(char c) {
@@ -235,7 +302,7 @@ public final class MathLayout {
      * read letter is enough to recognise the name ("c05" is cos); digits and brackets alone
      * ("(05") are taken as written.
      */
-    private static boolean matches(String text, int start, String[] allowed, String name) {
+    private static boolean matches(Traced text, int start, String[] allowed, String name) {
         int exactLetters = 0;
         for (int k = 0; k < 3; k++) {
             char c = text.charAt(start + k);
@@ -251,22 +318,67 @@ public final class MathLayout {
 
     // ---- value types ---------------------------------------------------------------------
 
+    /** Text in which each character knows the reading it came from, or ADDED. */
+    private static final class Traced {
+        static final int ADDED = -1;
+
+        final StringBuilder text = new StringBuilder();
+        final List<Integer> sources = new ArrayList<>();
+
+        /** Text the layout adds, such as the brackets around a fraction. */
+        static Traced added(String added) {
+            Traced traced = new Traced();
+            for (char c : added.toCharArray()) {
+                traced.append(c, ADDED);
+            }
+            return traced;
+        }
+
+        Traced append(char c, int source) {
+            text.append(c);
+            sources.add(source);
+            return this;
+        }
+
+        Traced append(Traced other) {
+            text.append(other.text);
+            sources.addAll(other.sources);
+            return this;
+        }
+
+        int length() {
+            return text.length();
+        }
+
+        char charAt(int index) {
+            return text.charAt(index);
+        }
+
+        @Override
+        public String toString() {
+            return text.toString();
+        }
+    }
+
     /** A symbol or a collapsed fraction/root, with the box it covers. */
     private static final class Node {
         enum Kind { SYMBOL, FRACTION, RADICAL }
 
         final Kind kind;
         final char symbol;
-        final String text;
+        /** The reading a symbol node was made from; ADDED for a composite. */
+        final int source;
+        final Traced text;
         final double minX;
         final double maxX;
         final double minY;
         final double maxY;
 
-        private Node(Kind kind, char symbol, String text, double minX, double maxX,
+        private Node(Kind kind, char symbol, int source, Traced text, double minX, double maxX,
                      double minY, double maxY) {
             this.kind = kind;
             this.symbol = symbol;
+            this.source = source;
             this.text = text;
             this.minX = minX;
             this.maxX = maxX;
@@ -274,12 +386,12 @@ public final class MathLayout {
             this.maxY = maxY;
         }
 
-        static Node symbol(char symbol, Glyph glyph) {
-            return new Node(Kind.SYMBOL, symbol, String.valueOf(symbol), glyph.getMinX(),
-                    glyph.getMaxX(), glyph.getMinY(), glyph.getMaxY());
+        static Node symbol(char symbol, Glyph glyph, int source) {
+            return new Node(Kind.SYMBOL, symbol, source, new Traced().append(symbol, source),
+                    glyph.getMinX(), glyph.getMaxX(), glyph.getMinY(), glyph.getMaxY());
         }
 
-        static Node composite(String text, Kind kind, Node head, List<Node> first,
+        static Node composite(Traced text, Kind kind, Node head, List<Node> first,
                               List<Node> second) {
             double minX = head.minX;
             double maxX = head.maxX;
@@ -293,7 +405,7 @@ public final class MathLayout {
                 minY = Math.min(minY, n.minY);
                 maxY = Math.max(maxY, n.maxY);
             }
-            return new Node(kind, '\0', text, minX, maxX, minY, maxY);
+            return new Node(kind, '\0', Traced.ADDED, text, minX, maxX, minY, maxY);
         }
 
         double centreX() {
@@ -314,7 +426,7 @@ public final class MathLayout {
         enum Kind { NUMBER, CONSTANT, FRACTION, RADICAL, CLOSE, OTHER }
 
         Kind kind;
-        String text;
+        Traced text;
         double minX;
         double maxX;
         double minY;
@@ -323,7 +435,7 @@ public final class MathLayout {
 
         static Token of(Node node) {
             Token t = new Token();
-            t.text = node.text;
+            t.text = new Traced().append(node.text);
             t.minX = node.minX;
             t.maxX = node.maxX;
             t.minY = node.minY;
@@ -345,7 +457,7 @@ public final class MathLayout {
         }
 
         void extend(Node node) {
-            text += node.text;
+            text.append(node.text);
             minY = Math.min(minY, node.minY);
             maxY = Math.max(maxY, node.maxY);
             maxX = Math.max(maxX, node.maxX);
@@ -376,9 +488,10 @@ public final class MathLayout {
             return toTheRight && exponent;
         }
 
-        void attachExponent(String exponent, List<Node> nodes) {
-            String base = kind == Kind.RADICAL ? "(" + text + ")" : text;
-            text = base + "^" + exponent;
+        void attachExponent(Traced exponent, List<Node> nodes) {
+            Traced base = kind == Kind.RADICAL
+                    ? Traced.added("(").append(text).append(Traced.added(")")) : text;
+            text = new Traced().append(base).append('^', Traced.ADDED).append(exponent);
             for (Node n : nodes) {
                 maxX = Math.max(maxX, n.maxX);
             }

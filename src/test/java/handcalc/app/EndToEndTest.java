@@ -1,6 +1,7 @@
 package handcalc.app;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,6 +10,8 @@ import handcalc.entity.Glyph;
 import handcalc.entity.Point;
 import handcalc.entity.Stroke;
 import handcalc.interface_adapter.CalculatorState;
+import handcalc.interface_adapter.LineView;
+import handcalc.interface_adapter.WrittenAnswer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -147,5 +150,130 @@ class EndToEndTest {
 
         assertEquals("2×2 = 4",
                 app.getHistoryViewModel().getState().getRows().get(0).getText());
+    }
+
+    private static double right(List<Stroke> strokes) {
+        return strokes.stream().mapToDouble(Stroke::getMaxX).max().getAsDouble();
+    }
+
+    private static List<Stroke> below(List<Stroke> strokes, double dy) {
+        List<Stroke> moved = new ArrayList<>();
+        for (Stroke stroke : strokes) {
+            List<Point> points = new ArrayList<>();
+            for (Point p : stroke.getPoints()) {
+                points.add(new Point(p.getX(), p.getY() + dy));
+            }
+            moved.add(new Stroke(points));
+        }
+        return moved;
+    }
+
+    private static LineView onlyLine(CalculatorApp app) {
+        List<LineView> lines = app.getViewModel().getState().getLines();
+        assertEquals(1, lines.size());
+        return lines.get(0);
+    }
+
+    @Test
+    void theAnswerIsWrittenAfterTheEqualsSign() {
+        List<Stroke> strokes = write("7-2=", 21);
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(strokes);
+
+        WrittenAnswer answer = onlyLine(app).getAnswer();
+        assertEquals("5", answer.getText());
+        assertTrue(answer.getX() > right(strokes), "the answer comes after the '='");
+        assertEquals("7−2", onlyLine(app).getFormula().toString());
+    }
+
+    @Test
+    void writingThatDoesNotEndInEqualsIsReadButNotSolved() {
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(write("7-2", 21));
+
+        LineView line = onlyLine(app);
+        assertFalse(line.isFinished());
+        assertNull(line.getAnswer());
+        assertEquals(3, line.getSymbols().size());
+    }
+
+    @Test
+    void theSymbolThatLeavesTheExpressionUnfinishedIsMarked() {
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(write("5+=", 3));
+
+        LineView line = onlyLine(app);
+        assertNull(line.getAnswer());
+        assertFalse(line.getSymbols().get(0).isFaulty());
+        assertTrue(line.getSymbols().get(1).isFaulty());
+        assertFalse(line.getSymbols().get(2).isFaulty());
+    }
+
+    @Test
+    void aCalculationWithNoValueIsWrittenAsUndefined() {
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(write("5÷0=", 9));
+
+        LineView line = onlyLine(app);
+        assertEquals("undefined", line.getAnswer().getText());
+        assertTrue(line.getAnswer().isError());
+        assertTrue(line.getSymbols().stream().noneMatch(s -> s.isFaulty()));
+        assertEquals("5÷0", line.getFormula().toString());
+    }
+
+    @Test
+    void aCorrectionOfWritingThatEndsInEqualsRewritesTheAnswer() {
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getCorrectController().executeWhenFinished(write("2+2=", 51), 1, '×');
+
+        assertEquals("4", onlyLine(app).getAnswer().getText());
+        assertEquals("2×2", onlyLine(app).getFormula().toString());
+    }
+
+    @Test
+    void eachLineOfThePageGetsItsOwnAnswer() {
+        List<Stroke> page = new ArrayList<>(write("7-2=", 21));
+        page.addAll(below(write("3×4=", 22), 300));
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(page);
+
+        List<LineView> lines = app.getViewModel().getState().getLines();
+        assertEquals(2, lines.size());
+        assertEquals("5", lines.get(0).getAnswer().getText());
+        assertEquals("12", lines.get(1).getAnswer().getText());
+    }
+
+    @Test
+    void aCorrectionOnTheSecondLineCountsSymbolsFromTheTop() {
+        List<Stroke> page = new ArrayList<>(write("7-2=", 21));
+        page.addAll(below(write("2+2=", 51), 300));
+        CalculatorApp app = new CalculatorApp(samples);
+
+        // the "+" of the second line comes after the four symbols of the first
+        app.getCorrectController().executeWhenFinished(page, 5, '×');
+
+        List<LineView> lines = app.getViewModel().getState().getLines();
+        assertEquals("5", lines.get(0).getAnswer().getText());
+        assertEquals("4", lines.get(1).getAnswer().getText());
+        assertEquals("2×2", lines.get(1).getFormula().toString());
+    }
+
+    @Test
+    void readingAPageAgainDoesNotRepeatItsHistory() {
+        List<Stroke> page = new ArrayList<>(write("7-2=", 21));
+        page.addAll(below(write("3×4=", 22), 300));
+        CalculatorApp app = new CalculatorApp(samples);
+
+        app.getController().executeWhenFinished(page);
+        app.getController().executeWhenFinished(page);
+        app.getHistoryController().refresh();
+
+        assertEquals(2, app.getHistoryViewModel().getState().getRows().size());
     }
 }

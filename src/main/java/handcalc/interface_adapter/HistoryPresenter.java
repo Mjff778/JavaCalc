@@ -2,6 +2,7 @@ package handcalc.interface_adapter;
 
 import handcalc.entity.HistoryEntry;
 import handcalc.use_case.history.HistoryOutputBoundary;
+import handcalc.use_case.recognize_and_solve.ResultFormat;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;

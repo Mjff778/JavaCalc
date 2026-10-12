@@ -20,7 +20,7 @@ import java.util.Random;
 
 /**
  * Trains {@link NeuralSymbolClassifier}s from collected handwriting and keeps the trained
- * model in a file.
+ * model in a file. One training runs at a time, as training may happen in the background.
  *
  * <p>Built-in synthetic symbols are always part of the training set so every symbol is
  * known, while each real sample is expanded into several distorted copies so real writing
@@ -46,7 +46,7 @@ public class NeuralModelTrainer implements ModelTrainer {
      * Makes a model available at program start: the stored one if there is a usable file
      * (taught any samples collected since), otherwise a freshly trained one.
      */
-    public void initialize(List<LabeledGlyph> collected) {
+    public synchronized void initialize(List<LabeledGlyph> collected) {
         NeuralSymbolClassifier model = loadStoredModel();
         if (model == null) {
             model = trainModel(collected);
@@ -66,7 +66,7 @@ public class NeuralModelTrainer implements ModelTrainer {
     }
 
     @Override
-    public TrainingReport train(List<LabeledGlyph> collected) {
+    public synchronized TrainingReport train(List<LabeledGlyph> collected) {
         List<LabeledGlyph> samples = knownSymbolsOnly(collected);
         List<LabeledGlyph> training = new ArrayList<>();
         List<LabeledGlyph> heldOut = new ArrayList<>();

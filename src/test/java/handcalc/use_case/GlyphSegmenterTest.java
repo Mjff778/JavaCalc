@@ -332,4 +332,30 @@ class GlyphSegmenterTest {
         assertEquals(4, glyphs.size());
         assertEquals(3, glyphs.get(2).getStrokes().size());
     }
+
+    @Test
+    void aPiOverAFractionBarIsNotAnEqualsSign() {
+        // as written: π (bar and two legs), the fraction bar, and a 4 below it
+        Stroke piBar = line(335, 309, 393, 309);
+        Stroke fractionBar = line(333, 353, 395, 355);
+        List<Glyph> glyphs = new GlyphSegmenter().segment(Arrays.asList(
+                piBar, line(347, 310, 347, 329), line(377, 310, 377, 341),
+                fractionBar, line(344, 364, 381, 387), line(367, 364, 368, 402)));
+
+        Glyph bar = null;
+        for (Glyph glyph : glyphs) {
+            if (glyph.getStrokes().contains(fractionBar)) {
+                bar = glyph;
+            }
+        }
+        assertEquals(1, bar.getStrokes().size(), "the fraction bar stands alone");
+    }
+
+    @Test
+    void twoBarsWithNothingBetweenThemAreStillAnEqualsSign() {
+        List<Glyph> glyphs = new GlyphSegmenter().segment(Arrays.asList(
+                line(614, 345, 639, 346), line(621, 360, 646, 361)));
+
+        assertEquals(1, glyphs.size());
+    }
 }

@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 
 class MathLayoutTest {
@@ -317,5 +319,40 @@ class MathLayoutTest {
     void digitsAndBracketsWithoutAnyLetterAreNeverTakenForAFunction() {
         assertEquals("(05(30))", linear(line("(05(30))")));
         assertEquals("51+2", linear(line("51+2")));
+    }
+
+    private static Set<Integer> indices(Integer... values) {
+        return new TreeSet<>(Arrays.asList(values));
+    }
+
+    @Test
+    void eachCharacterOfTheLineKnowsTheSymbolItCameFrom() {
+        MathLayout.Line line = MathLayout.layOut(line("12+3"));
+
+        assertEquals("12+3", line.getText());
+        assertEquals(indices(2), line.readingsIn(2, 3));
+        assertEquals(indices(0, 1), line.readingsIn(0, 2));
+    }
+
+    @Test
+    void aFractionBarIsTracedThroughItsDivisionSign() {
+        List<SymbolReading> items = Arrays.asList(
+                at('1', 40, 40, 55, 80),
+                at('-', 0, 100, 100, 100),
+                at('2', 40, 120, 58, 160));
+        MathLayout.Line line = MathLayout.layOut(items);
+
+        assertEquals("(1÷2)", line.getText());
+        assertEquals(indices(1), line.readingsIn(2, 3));
+        // the closing bracket was added by the layout: the nearest written symbol is the "2"
+        assertEquals(indices(2), line.readingsIn(4, 5));
+    }
+
+    @Test
+    void repairedFunctionNamesKeepTheirSymbols() {
+        MathLayout.Line line = MathLayout.layOut(line("5in(3)"));
+
+        assertEquals("sin(3)", line.getText());
+        assertEquals(indices(0, 1, 2), line.readingsIn(0, 3));
     }
 }

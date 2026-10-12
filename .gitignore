@@ -16,3 +16,6 @@ target/
 
 # private runtime data (local calculation history)
 data/history.jsonl
+
+# local backups of the handwriting samples and model
+data/backup-*/

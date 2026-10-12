@@ -14,7 +14,8 @@ import java.util.List;
  * <p>Strokes belong together when they
  * <ul>
  *   <li>cross or almost touch (the two strokes of "+", "×", "4", "t"),</li>
- *   <li>are two flat bars stacked closely (the two bars of "="), or</li>
+ *   <li>are two flat bars stacked closely with nothing between them (the two bars of "=";
+ *       the top of a "π" over a fraction bar has the legs of the "π" between them), or</li>
  *   <li>are a tiny dot sitting above or below a stroke: the dots of "÷" (a bar with a dot on
  *       <em>both</em> sides) and the dot of "i".</li>
  * </ul>
@@ -59,7 +60,7 @@ public class GlyphSegmenter {
             for (int j = i + 1; j < n; j++) {
                 boolean alike = dot[i] == dot[j]
                         || isFlat(dot[i] ? strokes.get(i) : strokes.get(j));
-                if (alike && belongTogether(strokes.get(i), strokes.get(j))) {
+                if (alike && belongTogether(strokes.get(i), strokes.get(j), strokes)) {
                     union(parent, i, j);
                 }
             }
@@ -110,8 +111,8 @@ public class GlyphSegmenter {
         return tallest > 0 ? tallest : longest;
     }
 
-    private static boolean belongTogether(Stroke a, Stroke b) {
-        if (isFlat(a) && isFlat(b) && stackedBars(a, b)) {
+    private static boolean belongTogether(Stroke a, Stroke b, List<Stroke> all) {
+        if (isFlat(a) && isFlat(b) && stackedBars(a, b) && !anythingBetween(a, b, all)) {
             return true;
         }
         if ((isFlat(a) && entirelyAboveOrBelow(b, a)) || (isFlat(b) && entirelyAboveOrBelow(a, b))) {
@@ -197,6 +198,22 @@ public class GlyphSegmenter {
         double outerArea = (outer.getMaxX() - outer.getMinX()) * (outer.getMaxY() - outer.getMinY());
         double innerArea = (inner.getMaxX() - inner.getMinX()) * (inner.getMaxY() - inner.getMinY());
         return inside && outerArea >= 2.5 * innerArea && size(outer) >= 1.5 * size(inner);
+    }
+
+    /** Does another stroke reach into the space between two stacked bars? */
+    private static boolean anythingBetween(Stroke a, Stroke b, List<Stroke> all) {
+        Stroke upper = a.getMinY() <= b.getMinY() ? a : b;
+        Stroke lower = upper == a ? b : a;
+        double left = Math.max(a.getMinX(), b.getMinX());
+        double right = Math.min(a.getMaxX(), b.getMaxX());
+        for (Stroke other : all) {
+            if (other != a && other != b
+                    && other.getMaxY() > upper.getMaxY() && other.getMinY() < lower.getMinY()
+                    && other.getMaxX() >= left && other.getMinX() <= right) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean stackedBars(Stroke a, Stroke b) {

@@ -42,6 +42,10 @@ public class CorrectSymbolInteractor implements CorrectSymbolInputBoundary {
 
     @Override
     public void execute(CorrectSymbolInputData inputData) {
+        if (inputData.isWaitForEquals()) {
+            correctPage(inputData);
+            return;
+        }
         List<SymbolReading> readings = reader.read(inputData.getStrokes());
         int index = inputData.getGlyphIndex();
         if (index < 0 || index >= readings.size()) {
@@ -49,17 +53,42 @@ public class CorrectSymbolInteractor implements CorrectSymbolInputBoundary {
             return;
         }
 
-        SymbolReading original = readings.get(index);
-        char symbol = inputData.getSymbol();
-        // a decimal point is told by its place, not its shape, so it is nothing to learn
-        if (classifier.canLearn(symbol)) {
+        List<SymbolReading> corrected = new ArrayList<>(readings);
+        corrected.set(index, corrected(readings.get(index), inputData.getSymbol()));
+        solver.solve(corrected);
+    }
+
+    /** Symbols are counted line by line from the top; the whole page is solved again. */
+    private void correctPage(CorrectSymbolInputData inputData) {
+        List<List<SymbolReading>> lines =
+                reader.readPage(inputData.getStrokes(), inputData.getPlaced());
+        int index = inputData.getGlyphIndex();
+        List<List<SymbolReading>> corrected = new ArrayList<>();
+        boolean found = false;
+        for (List<SymbolReading> line : lines) {
+            List<SymbolReading> copy = new ArrayList<>(line);
+            if (!found && index >= 0 && index < copy.size()) {
+                copy.set(index, corrected(copy.get(index), inputData.getSymbol()));
+                found = true;
+            }
+            index -= line.size();
+            corrected.add(copy);
+        }
+        if (!found) {
+            presenter.prepareFailView("", "No such symbol on the canvas", new ArrayList<>());
+            return;
+        }
+        solver.solvePage(corrected);
+    }
+
+    /** Remembers the writing as a sample of the symbol, and reads it as that symbol. */
+    private SymbolReading corrected(SymbolReading original, char symbol) {
+        // a decimal point is told by its place, not its shape, so it is nothing to learn; nor
+        // is a symbol the user picked before, as it is not their handwriting
+        if (!original.isPlaced() && classifier.canLearn(symbol)) {
             repository.save(new LabeledGlyph(original.getGlyph(), symbol));
             classifier.learn(original.getGlyph(), symbol);
         }
-
-        List<SymbolReading> corrected = new ArrayList<>(readings);
-        corrected.set(index,
-                new SymbolReading(original.getGlyph(), symbol, original.getAlternatives()));
-        solver.solve(corrected);
+        return new SymbolReading(original.getGlyph(), symbol, original.getAlternatives());
     }
 }
