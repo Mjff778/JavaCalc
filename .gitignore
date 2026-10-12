@@ -1,0 +1,18 @@
+# build output
+target/
+*.class
+
+# IDE / editor
+.idea/
+*.iml
+.vscode/
+.claude/
+
+# OS
+.DS_Store
+
+# tooling artifacts
+.github/modernize/
+
+# private runtime data (local calculation history)
+data/history.jsonl
