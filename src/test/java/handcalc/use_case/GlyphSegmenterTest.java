@@ -131,6 +131,40 @@ class GlyphSegmenterTest {
     }
 
     @Test
+    void aDivisionSignWhoseDotWasTappedTwiceIsStillOneGlyph() {
+        // as written: a "7", then the bar, the lower dot and the upper dot tapped twice
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                polyline(123, 309, 139, 309, 125, 359), line(173, 336, 200, 336), line(186, 352, 188, 354),
+                dot(187.2, 324.3), line(187, 324, 188, 324)));
+
+        assertEquals(2, glyphs.size());
+        assertEquals(4, glyphs.get(1).getStrokes().size());
+    }
+
+    @Test
+    void aBarDrawnInPiecesEndToEndIsOneBar() {
+        // as written: a π whose bar was drawn in three pieces, with "(" before it and "+" after
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                polyline(330, 315, 318, 338, 330, 361),
+                polyline(340, 325, 368, 320), line(354, 324, 355, 353),
+                line(369, 320, 375, 320), line(373, 321, 371, 348), line(373, 322, 382, 322),
+                line(401, 334, 420, 335), line(410, 312, 411, 350)));
+
+        assertEquals(3, glyphs.size());
+        assertEquals(5, glyphs.get(1).getStrokes().size());
+    }
+
+    @Test
+    void twoMinusSignsSideBySideStaySeparate() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                polyline(0, 0, 20, 0, 5, 20, 20, 40, 0, 40),
+                line(30, 20, 50, 20), line(60, 20, 80, 20),
+                line(95, 0, 95, 40)));
+
+        assertEquals(4, glyphs.size());
+    }
+
+    @Test
     void aSingleDotAboveABarIsNotADivisionSign() {
         List<Glyph> glyphs = segmenter.segment(
                 Arrays.asList(line(0, 50, 100, 50), dot(50, 20)));
@@ -357,5 +391,112 @@ class GlyphSegmenterTest {
                 line(614, 345, 639, 346), line(621, 360, 646, 361)));
 
         assertEquals(1, glyphs.size());
+    }
+
+    // ---- symbols completed with several strokes, as written in the collected samples -----
+
+    @Test
+    void aClickWhereABarStartsIsPartOfTheBar() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                line(471, 316, 502, 316), dot(473, 335), line(473, 335, 492, 335)));
+
+        assertEquals(1, glyphs.size());
+        assertEquals(3, glyphs.get(0).getStrokes().size());
+    }
+
+    @Test
+    void aClickAtTheEndOfALegIsPartOfThePi() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                line(472, 319, 521, 318), line(491, 319, 491, 349), line(514, 324, 514, 355),
+                dot(514, 355)));
+
+        assertEquals(1, glyphs.size());
+    }
+
+    @Test
+    void theDotOfAnITappedSeveralTimesALittleToTheLeftBelongsToItsStem() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                line(423, 359, 422, 387), dot(419, 330), dot(419, 331), line(419, 331, 419, 337)));
+
+        assertEquals(1, glyphs.size());
+        assertEquals(4, glyphs.get(0).getStrokes().size());
+    }
+
+    @Test
+    void anEqualsSignWithBarsOfUnevenLengthIsOneGlyph() {
+        assertEquals(1, segmenter.segment(Arrays.asList(
+                line(388, 256, 426, 256), line(392, 294, 410, 295))).size());
+        assertEquals(1, segmenter.segment(Arrays.asList(
+                line(353, 318, 390, 318), line(347, 345, 433, 345))).size());
+        assertEquals(1, segmenter.segment(Arrays.asList(
+                line(635, 383, 663, 383), line(626, 406, 645, 406))).size());
+    }
+
+    @Test
+    void anEqualsSignWhoseLowerBarIsDrawnInPiecesIsOneGlyph() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                line(496, 351, 517, 352), dot(500, 367),
+                line(500, 367, 508, 367), line(508, 367, 516, 367)));
+
+        assertEquals(1, glyphs.size());
+        assertEquals(4, glyphs.get(0).getStrokes().size());
+    }
+
+    @Test
+    void aSmallPiWhoseLegStartsBelowTheBarIsOneGlyph() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                line(470, 416, 499, 416), line(471, 422, 471, 433),
+                polyline(492, 417, 494, 430, 502, 434)));
+
+        assertEquals(1, glyphs.size());
+    }
+
+    @Test
+    void theTopBarOfAFiveDrawnApartFromItsStemBelongsToIt() {
+        // the stem rises above the bar, and the bar starts a little away from it
+        Stroke body = polyline(530, 214, 515, 265, 560, 262, 600, 285, 636, 320, 600, 366,
+                507, 360);
+        assertEquals(1, segmenter.segment(Arrays.asList(body, line(536, 233, 619, 233))).size());
+
+        Stroke slanted = polyline(444, 318, 404, 365, 430, 370, 444, 385, 430, 392, 404, 388);
+        assertEquals(1, segmenter.segment(Arrays.asList(slanted, line(433, 339, 466, 339))).size());
+    }
+
+    @Test
+    void aRaisedMinusAfterADigitIsNotTakenForTheTopBarOfAFive() {
+        Stroke two = polyline(0, 10, 10, 0, 25, 5, 25, 15, 0, 50, 30, 50);
+
+        assertEquals(2, segmenter.segment(Arrays.asList(two, line(32, 8, 45, 8))).size());
+    }
+
+    @Test
+    void aDivisionSignWithLargeDashesForDotsIsOneGlyph() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                polyline(300, 280, 360, 280, 320, 390),
+                line(425, 333, 552, 334),
+                polyline(474, 281, 481, 287, 488, 293), polyline(482, 373, 498, 380, 514, 388),
+                line(600, 280, 600, 390)));
+
+        assertEquals(3, glyphs.size());
+        assertEquals(3, glyphs.get(1).getStrokes().size());
+    }
+
+    @Test
+    void aFractionOfTwoSingleStrokeDigitsIsNotADivisionSign() {
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                polyline(-60, 5, -30, 5, -50, 75),
+                line(20, 5, 20, 35), line(0, 40, 40, 40), polyline(8, 50, 32, 50, 10, 75),
+                line(70, 5, 70, 75)));
+
+        assertEquals(5, glyphs.size());
+    }
+
+    @Test
+    void aStrayClickAboveAWideDigitIsNotTheDotOfAnI() {
+        // as written: a click up and to the left of a "4"
+        List<Glyph> glyphs = segmenter.segment(Arrays.asList(
+                dot(183, 223), polyline(230, 248, 195, 300, 276, 300), line(250, 270, 250, 330)));
+
+        assertEquals(2, glyphs.size());
     }
 }

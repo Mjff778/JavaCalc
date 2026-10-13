@@ -6,7 +6,9 @@ import handcalc.entity.Stroke;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Groups the pen strokes of a written line into symbols.
@@ -29,16 +31,37 @@ public class GlyphSegmenter {
     private static final double TOUCH_EXACT = 0.02;
     private static final double MIN_OVERLAP_RATIO = 0.3;
     private static final double DOT_RATIO = 0.25;
-    private static final double DOT_SIDEWAYS_TOLERANCE = 0.1;
+    private static final double DOT_SIDEWAYS_TOLERANCE = 0.2;
+    /** How far a dot may be from its stroke, relative to the stroke, on a line of small ones. */
+    private static final double DOT_REACH_RATIO = 1.3;
+    /** A dot this close to a stroke was clicked onto it, as the pen went down or came up. */
+    private static final double TAP_RATIO = 0.04;
+    /**
+     * Strokes this small next to a line's symbols may be the dots of a "÷" drawn as dashes,
+     * provided they are also small next to the bar.
+     */
+    private static final double MARK_RATIO = 0.35;
+    private static final double MARK_TO_BAR_RATIO = 0.3;
+    /** Where the top bar of a "5" drawn apart from its body sits, relative to the body. */
+    private static final double TOP_BAR_ZONE_RATIO = 0.4;
+    private static final double TOP_BAR_RISE_RATIO = 0.1;
+    private static final double TOP_BAR_GAP_RATIO = 0.2;
     private static final double FLAT_RATIO = 0.3;
+    private static final double STEM_RATIO = 0.4;
     /** With this many ordinary strokes on a line, dots are judged against their median size. */
     private static final int MEDIAN_MIN_STROKES = 3;
-    /** How far below its bar each of two or more legs may start, relative to the leg's size. */
+    /**
+     * How far below its bar each of two or more legs may start, relative to the leg or the
+     * bar, whichever is larger.
+     */
     private static final double LEG_GAP_RATIO = 0.35;
     /** How close a root sign's tick must start to the left end of its bar. */
     private static final double TICK_REACH_RATIO = 0.2;
     /** How much higher than its lowest point both ends of a root sign's tick must be. */
     private static final double TICK_RISE_RATIO = 0.05;
+    /** How far apart, along and across the line, two pieces of one bar may be. */
+    private static final double BAR_PIECE_GAP_RATIO = 0.15;
+    private static final double BAR_PIECE_OFFSET_RATIO = 0.1;
 
     public List<Glyph> segment(List<Stroke> strokes) {
         int n = strokes.size();
@@ -65,6 +88,7 @@ public class GlyphSegmenter {
                 }
             }
         }
+        joinBars(strokes, parent, reference);
         attachLegsToBars(strokes, dot, parent);
         attachDots(strokes, dot, parent, reference);
 
@@ -115,6 +139,9 @@ public class GlyphSegmenter {
         if (isFlat(a) && isFlat(b) && stackedBars(a, b) && !anythingBetween(a, b, all)) {
             return true;
         }
+        if (isTopBarOf(a, b) || isTopBarOf(b, a)) {
+            return true;
+        }
         if ((isFlat(a) && entirelyAboveOrBelow(b, a)) || (isFlat(b) && entirelyAboveOrBelow(a, b))) {
             // a numerator or denominator, however close to the fraction bar
             return false;
@@ -133,6 +160,24 @@ public class GlyphSegmenter {
         // they sit on top of each other (the stem of a "4" or "t", the parts of an "a");
         // strokes side by side are neighbouring symbols or a power next to its base.
         return gap <= TOUCH_EXACT * smaller || overlapsHorizontally(a, b);
+    }
+
+    /**
+     * Is {@code bar} the top bar of a "5" drawn apart from its body? It lies across the upper
+     * part of the body, below the top of the stem, and starts at the stem. A minus raised
+     * after a digit starts beyond the digit instead.
+     */
+    private static boolean isTopBarOf(Stroke bar, Stroke body) {
+        if (!isFlat(bar) || isFlat(body)) {
+            return false;
+        }
+        double height = body.getMaxY() - body.getMinY();
+        double barY = (bar.getMinY() + bar.getMaxY()) / 2;
+        return height > 0
+                && barY <= body.getMinY() + TOP_BAR_ZONE_RATIO * height
+                && body.getMinY() <= barY - TOP_BAR_RISE_RATIO * height
+                && bar.getMinX() < body.getMaxX()
+                && distance(leftmost(bar), body) <= TOP_BAR_GAP_RATIO * height;
     }
 
     private static boolean overlapsHorizontally(Stroke a, Stroke b) {
@@ -221,15 +266,62 @@ public class GlyphSegmenter {
         double widthB = b.getMaxX() - b.getMinX();
         double wider = Math.max(widthA, widthB);
         double narrower = Math.min(widthA, widthB);
-        if (narrower < 0.5 * wider) {
+        if (narrower < 0.4 * wider) {
             return false;
         }
         double overlap = Math.min(a.getMaxX(), b.getMaxX()) - Math.max(a.getMinX(), b.getMinX());
-        if (overlap < 0.6 * narrower) {
+        if (overlap < 0.5 * narrower) {
             return false;
         }
         double gap = Math.max(a.getMinY(), b.getMinY()) - Math.min(a.getMaxY(), b.getMaxY());
         return gap <= 1.2 * wider;
+    }
+
+    /**
+     * A bar drawn in several goes, such as the top of a "π" when the pen lifts halfway, is
+     * one bar: flat pieces on the same line that meet or nearly meet end to end. Two minus
+     * signs side by side are further apart than that. Two bars stacked with nothing between
+     * them are then an "=", however many pieces each was drawn in.
+     */
+    private static void joinBars(List<Stroke> strokes, int[] parent, double reference) {
+        int n = strokes.size();
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                Stroke a = strokes.get(i);
+                Stroke b = strokes.get(j);
+                if (!isFlat(a) || !isFlat(b)) {
+                    continue;
+                }
+                double gap = Math.max(a.getMinX(), b.getMinX()) - Math.min(a.getMaxX(), b.getMaxX());
+                double offset = Math.abs((a.getMinY() + a.getMaxY()) / 2
+                        - (b.getMinY() + b.getMaxY()) / 2);
+                if (gap <= BAR_PIECE_GAP_RATIO * reference
+                        && offset <= BAR_PIECE_OFFSET_RATIO * reference) {
+                    union(parent, i, j);
+                }
+            }
+        }
+
+        Map<Integer, List<Point>> barInk = new LinkedHashMap<>();
+        for (int i = 0; i < n; i++) {
+            if (isFlat(strokes.get(i))) {
+                barInk.computeIfAbsent(find(parent, i), root -> new ArrayList<>())
+                        .addAll(strokes.get(i).getPoints());
+            }
+        }
+        List<Integer> roots = new ArrayList<>(barInk.keySet());
+        List<Stroke> bars = new ArrayList<>();
+        for (int root : roots) {
+            bars.add(new Stroke(barInk.get(root)));
+        }
+        for (int a = 0; a < bars.size(); a++) {
+            for (int b = a + 1; b < bars.size(); b++) {
+                if (stackedBars(bars.get(a), bars.get(b))
+                        && !anythingBetween(bars.get(a), bars.get(b), strokes)) {
+                    union(parent, roots.get(a), roots.get(b));
+                }
+            }
+        }
     }
 
     /**
@@ -276,7 +368,8 @@ public class GlyphSegmenter {
                     crossingLegs++;
                 } else if (distance(bar, other) <= 0.1 * size(other)) {
                     legs.add(o);
-                } else if (distance(bar, other) <= LEG_GAP_RATIO * size(other)) {
+                } else if (distance(bar, other)
+                        <= LEG_GAP_RATIO * Math.max(size(other), barWidth)) {
                     nearLegs.add(o);
                 }
             }
@@ -342,25 +435,33 @@ public class GlyphSegmenter {
         return Math.hypot(a.getX() - b.getX(), a.getY() - b.getY());
     }
 
-    /** Joins each tiny dot to the stroke it belongs to, if any. */
+    /**
+     * Joins each tiny dot to the stroke it belongs to, if any: a click on a stroke, the dot of
+     * an "i", or the dots of a "÷", which may also be short dashes.
+     */
     private static void attachDots(List<Stroke> strokes, boolean[] dot, int[] parent,
                                    double reference) {
         int n = strokes.size();
-        int[] aboveDot = new int[n];
-        int[] belowDot = new int[n];
-        java.util.Arrays.fill(aboveDot, -1);
-        java.util.Arrays.fill(belowDot, -1);
+        // a dot may be tapped more than once, so a bar can have several dots on one side
+        List<List<Integer>> aboveDots = new ArrayList<>();
+        List<List<Integer>> belowDots = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            aboveDots.add(new ArrayList<>());
+            belowDots.add(new ArrayList<>());
+        }
 
         for (int d = 0; d < n; d++) {
-            if (!dot[d]) {
+            Stroke mark = strokes.get(d);
+            boolean dash = !dot[d] && !isFlat(mark) && size(mark) < MARK_RATIO * reference;
+            if (!dot[d] && !dash) {
                 continue;
             }
-            double cx = (strokes.get(d).getMinX() + strokes.get(d).getMaxX()) / 2;
-            double cy = (strokes.get(d).getMinY() + strokes.get(d).getMaxY()) / 2;
+            double cx = (mark.getMinX() + mark.getMaxX()) / 2;
+            double cy = (mark.getMinY() + mark.getMaxY()) / 2;
             int host = -1;
             double best = Double.POSITIVE_INFINITY;
             for (int h = 0; h < n; h++) {
-                if (dot[h]) {
+                if (h == d || dot[h]) {
                     continue;
                 }
                 double distance = distance(strokes.get(d), strokes.get(h));
@@ -369,7 +470,11 @@ public class GlyphSegmenter {
                     host = h;
                 }
             }
-            if (host < 0 || best > reference) {
+            if (host < 0 || best > Math.max(reference, DOT_REACH_RATIO * size(strokes.get(host)))) {
+                continue;
+            }
+            if (dot[d] && best <= TAP_RATIO * reference) {
+                union(parent, d, host);
                 continue;
             }
             Stroke hostStroke = strokes.get(host);
@@ -380,21 +485,31 @@ public class GlyphSegmenter {
             boolean above = cy < (hostStroke.getMinY() + hostStroke.getMaxY()) / 2;
             if (isFlat(hostStroke)) {
                 // a division sign has a dot on both sides of its bar
-                if (above) {
-                    aboveDot[host] = d;
-                } else {
-                    belowDot[host] = d;
+                if (dash && size(mark) > MARK_TO_BAR_RATIO * (hostStroke.getMaxX() - hostStroke.getMinX())) {
+                    continue;
                 }
-            } else if (above && cy < hostStroke.getMinY()) {
+                (above ? aboveDots : belowDots).get(host).add(d);
+            } else if (dot[d] && above && cy < hostStroke.getMinY() && isStem(hostStroke)) {
                 union(parent, d, host);
             }
         }
         for (int h = 0; h < n; h++) {
-            if (aboveDot[h] >= 0 && belowDot[h] >= 0) {
-                union(parent, aboveDot[h], h);
-                union(parent, belowDot[h], h);
+            if (!aboveDots.get(h).isEmpty() && !belowDots.get(h).isEmpty()) {
+                for (int d : aboveDots.get(h)) {
+                    union(parent, d, h);
+                }
+                for (int d : belowDots.get(h)) {
+                    union(parent, d, h);
+                }
             }
         }
+    }
+
+    /** An upright line, such as the stem of an "i": much taller than it is wide. */
+    private static boolean isStem(Stroke stroke) {
+        double width = stroke.getMaxX() - stroke.getMinX();
+        double height = stroke.getMaxY() - stroke.getMinY();
+        return height > 0 && width <= STEM_RATIO * height;
     }
 
     /** A horizontal bar: much wider than it is tall. */
@@ -404,8 +519,31 @@ public class GlyphSegmenter {
         return width > 0 && height <= FLAT_RATIO * width;
     }
 
+    /** Do any two of the glyph's strokes cross or touch? */
+    static boolean strokesTouch(Glyph glyph) {
+        List<Stroke> strokes = glyph.getStrokes();
+        for (int i = 0; i < strokes.size(); i++) {
+            for (int j = i + 1; j < strokes.size(); j++) {
+                if (distance(strokes.get(i), strokes.get(j)) == 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static double size(Stroke stroke) {
         return Math.max(stroke.getMaxX() - stroke.getMinX(), stroke.getMaxY() - stroke.getMinY());
+    }
+
+    private static double distance(Point p, Stroke stroke) {
+        List<Point> points = stroke.getPoints();
+        double best = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < points.size(); i++) {
+            best = Math.min(best,
+                    pointToSegment(p, points.get(i), points.get(Math.min(i + 1, points.size() - 1))));
+        }
+        return best;
     }
 
     /** Smallest distance between any two points of the two pen traces. */

@@ -185,13 +185,21 @@ public final class MathLayout {
             if (last != null && mayBegin && last.canTakeExponent() && last.isBaseFor(node)) {
                 List<Node> exponent = new ArrayList<>();
                 int j = i;
-                while (j < nodes.size() && last.isBaseFor(nodes.get(j))) {
+                while (j < nodes.size() && last.isBaseFor(nodes.get(j))
+                        && (exponent.isEmpty() || atExponentLevel(nodes.get(j), exponent, last))) {
                     exponent.add(nodes.get(j));
                     j++;
                 }
-                last.attachExponent(wrap(linear(exponent)), exponent);
-                i = j;
-                continue;
+                // an operator ending the exponent has nothing to work on: it is the line's
+                while (!exponent.isEmpty() && isOperator(exponent.get(exponent.size() - 1))) {
+                    exponent.remove(exponent.size() - 1);
+                    j--;
+                }
+                if (!exponent.isEmpty()) {
+                    last.attachExponent(wrap(linear(exponent)), exponent);
+                    i = j;
+                    continue;
+                }
             }
             if (last != null && last.kind == Token.Kind.NUMBER && !last.hasExponent
                     && node.isDigitOrPoint()) {
@@ -212,6 +220,27 @@ public final class MathLayout {
             text.append(token.text);
         }
         return text;
+    }
+
+    /**
+     * Does {@code node} sit at the height of the exponent begun so far rather than at the
+     * height of its base? A "÷" with a high dot is a little raised next to a tall digit, but
+     * still nearer the digit's middle than the exponent written well above it.
+     */
+    private static boolean atExponentLevel(Node node, List<Node> exponent, Token base) {
+        double top = Double.POSITIVE_INFINITY;
+        double bottom = Double.NEGATIVE_INFINITY;
+        for (Node n : exponent) {
+            top = Math.min(top, n.minY);
+            bottom = Math.max(bottom, n.maxY);
+        }
+        double exponentMiddle = (top + bottom) / 2;
+        double baseMiddle = (base.minY + base.maxY) / 2;
+        return Math.abs(node.centreY() - exponentMiddle) <= Math.abs(node.centreY() - baseMiddle);
+    }
+
+    private static boolean isOperator(Node node) {
+        return node.kind == Node.Kind.SYMBOL && "+-×÷=".indexOf(node.symbol) >= 0;
     }
 
     // ---- helpers -------------------------------------------------------------------------

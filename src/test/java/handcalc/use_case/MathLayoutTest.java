@@ -147,6 +147,30 @@ class MathLayoutTest {
     }
 
     @Test
+    void aDivisionSignAfterAPowerIsNotPulledIntoTheExponent() {
+        // as written: a tall 7 cubed, then a ÷ whose top dot sits well above its bar, so the
+        // sign as a whole is a little higher than the middle of the 7
+        List<SymbolReading> items = Arrays.asList(
+                at('7', 49, 244, 84, 337),
+                at('3', 87, 217, 103, 243),
+                at('÷', 141, 254, 202, 305),
+                at('2', 236, 243, 290, 314));
+
+        assertEquals("7^3÷2", linear(items));
+    }
+
+    @Test
+    void anExponentNeverEndsInAnOperator() {
+        List<SymbolReading> items = Arrays.asList(
+                at('2', 0, 40, 25, 90),
+                at('3', 28, 22, 40, 44),
+                at('-', 48, 55, 68, 55),
+                at('1', 76, 40, 101, 90));
+
+        assertEquals("2^3-1", linear(items));
+    }
+
+    @Test
     void sameSizedSymbolOnTheBaselineIsNotAnExponent() {
         assertEquals("23", linear(line("23")));
     }

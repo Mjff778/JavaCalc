@@ -48,7 +48,9 @@ mvn test
 ## Using the calculator
 
 1. Write an expression on the canvas. Leave a small gap between symbols: strokes that touch
-   are read as a single symbol.
+   are read as a single symbol. A symbol may take as many strokes as you like, such as a `π`
+   whose bar is drawn in pieces, a `5` with its top bar added separately, or a dot tapped
+   twice.
 2. End the line with `=` and lift the pen. After a moment the answer is written after the
    `=` (or `undefined`, for something like `5÷0`). Write the next calculation on a new line
    below; each line is worked out on its own. Changing a line works it out again; the
@@ -77,11 +79,12 @@ Angles are in degrees, unless the angle contains `π`, in which case it is in ra
 ### Writing tips
 
 - **Powers:** write the exponent smaller and at the upper right of its base, clearly above
-  the base's middle.
+  the base's middle. Whatever follows at about the height of the base, such as a `÷` or a
+  `−`, is back on the main line.
 - **Fractions:** write the numerator above the bar and the denominator below it.
 - **Roots:** draw the `√` sign and write the number under or next to it.
-- **Division and equals:** `÷` is a bar with a dot above and below it, and `=` is two
-  stacked bars.
+- **Division and equals:** `÷` is a bar with a dot (or a short dash) above and below it,
+  and `=` is two stacked bars, which may differ a little in length.
 
 ## Training it on your handwriting
 
@@ -118,15 +121,20 @@ To take your training to another computer, copy `data/samples.txt`.
 
 1. **Segmentation** groups pen strokes into symbols. Strokes that cross or nearly touch
    belong together (as in `+` or `4`), and stacked bars and dots are combined into `=` and
-   `÷`, as long as nothing is written between the bars. A fraction bar or root sign is kept
-   separate from the numbers around it.
+   `÷`, as long as nothing is written between the bars. Symbols finished in several strokes
+   are put back together: pieces of one bar, the top bar of a `5`, the legs of a `π`, and
+   clicks that land on ink already drawn. A fraction bar or root sign is kept separate from
+   the numbers around it.
 2. **Lines** are found from where the symbols sit on the page; each line is read and solved
    on its own, once it ends in `=`.
-3. **Recognition** classifies each symbol with a small neural network. A tiny mark on the
-   baseline is read as a decimal point, and a sign that might be a root and has something
-   written under it is a root. Symbols you picked are read as picked.
+3. **Recognition** classifies each symbol with a small neural network, which also sees how
+   many strokes the symbol has (clicks on existing ink do not count). A tiny mark on the
+   baseline is read as a decimal point, a sign that might be a root and has something
+   written under it is a root, and a symbol whose strokes cross is never `i`, `=` or `÷`.
+   Symbols you picked are read as picked.
 4. **Layout** uses the position of each symbol to find fractions, roots and powers, and
-   turns the expression into a single line such as `(3÷4)+2^3`. Common look-alikes in
+   turns the expression into a single line such as `(3÷4)+2^3`. An exponent never ends in
+   an operator, so a `÷` after a power stays on the line. Common look-alikes in
    function names are fixed automatically, so a misread `c05` still becomes `cos`. A symbol
    that makes the line impossible to read is traced back to the handwriting and underlined.
 5. **Evaluation** calculates the result, which is written after the `=` at the size of your

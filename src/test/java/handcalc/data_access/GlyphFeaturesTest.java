@@ -50,4 +50,26 @@ class GlyphFeaturesTest {
         assertArrayEquals(new float[] {0, 0, 0, w},
                 strokeCountPart(GlyphFeatures.extract(glyphWithStrokes(7))));
     }
+
+    @Test
+    void aClickOnTheInkIsNotCountedAsAStroke() {
+        float w = GlyphFeatures.STROKE_COUNT_WEIGHT;
+        // a minus with a click where the pen came up, as written
+        Glyph minus = new Glyph(Arrays.asList(
+                new Stroke(Arrays.asList(new Point(533, 322), new Point(565, 322))),
+                new Stroke(Arrays.asList(new Point(565, 322)))));
+
+        assertArrayEquals(new float[] {w, 0, 0, 0}, strokeCountPart(GlyphFeatures.extract(minus)));
+    }
+
+    @Test
+    void theDotsOfADivisionSignAreCounted() {
+        float w = GlyphFeatures.STROKE_COUNT_WEIGHT;
+        Glyph divide = new Glyph(Arrays.asList(
+                new Stroke(Arrays.asList(new Point(0, 50), new Point(100, 50))),
+                new Stroke(Arrays.asList(new Point(50, 20))),
+                new Stroke(Arrays.asList(new Point(50, 80)))));
+
+        assertArrayEquals(new float[] {0, 0, w, 0}, strokeCountPart(GlyphFeatures.extract(divide)));
+    }
 }

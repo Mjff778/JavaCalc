@@ -15,7 +15,8 @@ import java.util.List;
  * <p>A decimal point is recognized by its size and place rather than by its shape: a mark
  * far smaller than the line's symbols, down at the baseline. Place also settles a root sign,
  * which is easily read as an "n" or a "c": a symbol that might be a root and has other
- * symbols written under it is a root, as nothing is ever written under an "n".
+ * symbols written under it is a root, as nothing is ever written under an "n". Likewise a
+ * symbol whose strokes cross is never an "i", "=" or "÷", whose strokes stay apart.
  */
 public class HandwritingReader {
 
@@ -23,6 +24,8 @@ public class HandwritingReader {
     private static final char ROOT = '√';
     private static final double POINT_SIZE_RATIO = 0.3;
     private static final double BASELINE_ZONE_RATIO = 0.35;
+    /** Symbols made of strokes that never touch one another. */
+    private static final String APART = "i=÷";
 
     private final GlyphSegmenter segmenter;
     private final SymbolClassifier classifier;
@@ -88,7 +91,7 @@ public class HandwritingReader {
             List<Candidate> candidates = classifier.classify(glyph);
             List<Candidate> top =
                     candidates.subList(0, Math.min(MAX_ALTERNATIVES, candidates.size()));
-            readings.add(new SymbolReading(glyph, candidates.get(0).getSymbol(), top));
+            readings.add(new SymbolReading(glyph, mostLikely(glyph, candidates), top));
         }
         for (int i = 0; i < readings.size(); i++) {
             SymbolReading reading = readings.get(i);
@@ -99,6 +102,18 @@ public class HandwritingReader {
             }
         }
         return readings;
+    }
+
+    /** The best candidate that the way the strokes meet allows. */
+    private static char mostLikely(Glyph glyph, List<Candidate> candidates) {
+        if (GlyphSegmenter.strokesTouch(glyph)) {
+            for (Candidate candidate : candidates) {
+                if (APART.indexOf(candidate.getSymbol()) < 0) {
+                    return candidate.getSymbol();
+                }
+            }
+        }
+        return candidates.get(0).getSymbol();
     }
 
     /** A picked symbol is certain; what else its writing might have been is kept as choices. */
