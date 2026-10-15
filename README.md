@@ -20,6 +20,8 @@ on your own handwriting. Nothing is sent over the network.
   and pause: its answer is written after it in a handwriting typeface, and stays there
   until you change that line or wipe the answer off. A symbol that makes a line wrong is
   underlined in red.
+- **Carry an answer down.** Write `ans` to use the answer of the line above, as in
+  `ans÷4 =` below `12×3 =`.
 - **Check what was calculated.** Rest the mouse on an answer to see the calculation typeset
   the way it was read: fractions, powers and roots included.
 - **Zoom and move around.** Pinch with two fingers to zoom, and swipe with two fingers to
@@ -54,7 +56,10 @@ mvn test
 2. End the line with `=` and lift the pen. After a moment the answer is written after the
    `=` (or `undefined`, for something like `5÷0`). Write the next calculation on a new line
    below; each line is worked out on its own. Changing a line works it out again; the
-   eraser wipes an answer off, and Undo brings it back.
+   eraser wipes an answer off, and Undo brings it back. To build on an answer, write `ans`
+   on a later line: it stands for the answer of the nearest line above that ends in `=`
+   (lines you are still writing are passed over). If that line has no answer, `ans` is
+   underlined in red. The history shows the number `ans` stood for.
 3. Rest the mouse on an answer to check the calculation that was done. If a symbol is
    underlined in red, the line cannot be read that way: rest the mouse on the symbol to see
    how it was read and choose what it really is, or rewrite it. Any symbol of a finished

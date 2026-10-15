@@ -4,24 +4,73 @@ package handcalc.entity;
  * An arithmetic expression such as {@code 12+3×(4-1)} or {@code 2sin(30)+√(9)^2}.
  *
  * <p>Supports {@code + - × ÷ ^}, parentheses, decimal numbers, unary minus, {@code √},
- * the constant {@code π}, the functions {@code sin cos tan} and implicit multiplication such
- * as {@code 2(3+4)} or {@code 2π}. Angles are in degrees, except that an argument which
+ * the constant {@code π}, the functions {@code sin cos tan}, {@code ans} for an earlier answer,
+ * and implicit multiplication such as {@code 2(3+4)}, {@code 2π} or {@code 2ans}. Angles are in degrees, except that an argument which
  * contains {@code π} is taken as radians ({@code sin(π÷2)} is 1). The ASCII spellings {@code *} and {@code /} are accepted as well.
  */
 public final class Expression {
 
+    private static final String ANS = "ans";
+    private static final String[] NAMES = {ANS, "sin", "cos", "tan"};
+
     private final String text;
+    private final Double ans;
 
     public Expression(String text) {
+        this(text, null);
+    }
+
+    /** @param ans what {@code ans} stands for, or null if there is no answer to use */
+    public Expression(String text, Double ans) {
         this.text = text;
+        this.ans = ans;
     }
 
     public String getText() {
         return text;
     }
 
+    /** @return the text with each {@code ans} replaced by {@code number} */
+    public String withAnsWrittenAs(String number) {
+        StringBuilder written = new StringBuilder();
+        int i = 0;
+        while (i < text.length()) {
+            String name = nameAt(text, i);
+            if (name == null) {
+                written.append(text.charAt(i++));
+                continue;
+            }
+            i += name.length();
+            if (!name.equals(ANS)) {
+                written.append(name);
+            } else if (number.startsWith("-")
+                    || (written.length() > 0 && isNumeral(written.charAt(written.length() - 1)))
+                    || (i < text.length() && isNumeral(text.charAt(i)))) {
+                // so that "2ans" is not written "23", nor "ans^2" "-3^2"
+                written.append('(').append(number).append(')');
+            } else {
+                written.append(number);
+            }
+        }
+        return written.toString();
+    }
+
+    /** @return the known name the letters at {@code start} begin with, as in "2anssin30" */
+    private static String nameAt(String input, int start) {
+        for (String name : NAMES) {
+            if (input.startsWith(name, start)) {
+                return name;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNumeral(char c) {
+        return Character.isDigit(c) || c == '.';
+    }
+
     public double evaluate() throws InvalidExpressionException {
-        Parser parser = new Parser(text);
+        Parser parser = new Parser(text, ans);
         double value = parser.parseExpression();
         parser.expectEnd();
         if (Double.isNaN(value) || Double.isInfinite(value)) {
@@ -38,18 +87,19 @@ public final class Expression {
      * unary      := '-' unary | power
      * power      := primary ('^' unary)?
      * primary    := number | 'π' | '(' expression ')' | '√' unary
-     *               | name ( '(' expression ')' | power )
+     *               | 'ans' | name ( '(' expression ')' | power )
      * </pre>
      */
     private static final class Parser {
         private static final char END = '\0';
-
         private final String input;
+        private final Double ans;
         private int pos;
         private int piCount;
 
-        Parser(String input) {
+        Parser(String input, Double ans) {
             this.input = input;
+            this.ans = ans;
         }
 
         double parseExpression() throws InvalidExpressionException {
@@ -143,14 +193,22 @@ public final class Expression {
 
         private double parseFunction() throws InvalidExpressionException {
             int start = pos;
-            // π is a letter to Java, but never part of a name: "sinπ" is sin(π)
-            while (Character.isLetter(peek()) && peek() != 'π') {
-                pos++;
+            String name = nameAt(input, start);
+            if (name == null) {
+                // π is a letter to Java, but never part of a name: "sinπ" is sin(π)
+                while (Character.isLetter(peek()) && peek() != 'π') {
+                    pos++;
+                }
+                throw new InvalidExpressionException(
+                        "Unknown function '" + input.substring(start, pos) + "'", start, pos);
             }
-            String name = input.substring(start, pos);
-            if (!name.equals("sin") && !name.equals("cos") && !name.equals("tan")) {
-                throw new InvalidExpressionException("Unknown function '" + name + "'",
-                        start, pos);
+            pos += name.length();
+            if (name.equals(ANS)) {
+                if (ans == null) {
+                    throw new InvalidExpressionException("ans needs a solved line above it",
+                            start, pos);
+                }
+                return ans;
             }
             int piBefore = piCount;
             double argument = peek() == '(' ? parsePrimary() : parsePower();

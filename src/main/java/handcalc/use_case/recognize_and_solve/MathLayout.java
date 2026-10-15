@@ -17,7 +17,7 @@ import java.util.TreeSet;
  *   <li>everything else is read left to right.</li>
  * </ul>
  * Letters that almost spell sin, cos or tan are corrected, because "c" looks like "(",
- * "o" like "0" and "s" like "5".
+ * "o" like "0" and "s" like "5"; {@code ans} written in full is kept as it is.
  *
  * <p>Every character of the line remembers which written symbol it came from, so that a
  * mistake found in the line can be pointed out in the handwriting.
@@ -25,6 +25,7 @@ import java.util.TreeSet;
 public final class MathLayout {
 
     private static final String[] FUNCTIONS = {"sin", "cos", "tan"};
+    private static final String ANS = "ans";
     /** For each function, the characters each letter may have been mistaken for. */
     private static final String[][] LOOK_ALIKES = {
         {"s5", "i1", "n"},
@@ -283,9 +284,11 @@ public final class MathLayout {
         List<Boolean> inName = new ArrayList<>();
         int i = 0;
         while (i < text.length()) {
-            String name = null;
+            String name = spells(text, i, ANS) ? ANS : null;
             for (int f = 0; f < FUNCTIONS.length && name == null; f++) {
-                if (i + 3 <= text.length() && matches(text, i, LOOK_ALIKES[f], FUNCTIONS[f])) {
+                // "2+ans" is not "2tans": a look-alike never takes the start of a written ans
+                if (i + 3 <= text.length() && matches(text, i, LOOK_ALIKES[f], FUNCTIONS[f])
+                        && (spells(text, i, FUNCTIONS[f]) || !spells(text, i + 1, ANS))) {
                     name = FUNCTIONS[f];
                 }
             }
@@ -295,6 +298,9 @@ public final class MathLayout {
                     inName.add(true);
                 }
                 i += 3;
+                if (name.equals(ANS)) {
+                    continue;
+                }
                 if (i < text.length() && text.charAt(i) == 'c') {
                     result.append('(', text.sources.get(i));
                     inName.add(false);
@@ -319,6 +325,19 @@ public final class MathLayout {
             }
         }
         return result;
+    }
+
+    /** @return true if the text at {@code start} is {@code word}, letter for letter */
+    private static boolean spells(Traced text, int start, String word) {
+        if (start + word.length() > text.length()) {
+            return false;
+        }
+        for (int k = 0; k < word.length(); k++) {
+            if (text.charAt(start + k) != word.charAt(k)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isDigitLike(char c) {

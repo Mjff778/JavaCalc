@@ -280,6 +280,18 @@ class MathLayoutTest {
     }
 
     @Test
+    void aPlusBeforeAnsIsNotTakenForTheTOfTan() {
+        assertEquals("2+ans", linear(line("2+ans")));
+        assertEquals("tansin30", linear(line("tansin30")));
+    }
+
+    @Test
+    void ansBesideDigitsKeepsItsLetters() {
+        assertEquals("ans2", linear(line("ans2")));
+        assertEquals("3ans", linear(line("3ans")));
+    }
+
+    @Test
     void lettersAwayFromDigitsAreLeftAlone() {
         assertEquals("oo", linear(line("oo")));
     }

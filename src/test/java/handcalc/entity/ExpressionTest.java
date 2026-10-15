@@ -210,4 +210,54 @@ class ExpressionTest {
             assertFalse(e.hasPosition(), text);
         }
     }
+
+    private static double evalWithAnswer(String text, double ans)
+            throws InvalidExpressionException {
+        return new Expression(text, ans).evaluate();
+    }
+
+    @Test
+    void ansIsTheAnswerItIsGiven() throws Exception {
+        assertEquals(9, evalWithAnswer("ans÷4", 36));
+        assertEquals(-5, evalWithAnswer("ans", -5));
+    }
+
+    @Test
+    void ansIsUsedLikeANumber() throws Exception {
+        assertEquals(6, evalWithAnswer("2ans", 3));
+        assertEquals(9, evalWithAnswer("ans^2", 3));
+        assertEquals(3, evalWithAnswer("√ans", 9));
+        assertEquals(12, evalWithAnswer("ans(3+1)", 3));
+        assertEquals(0.5, evalWithAnswer("sin(ans)", 30), 1e-12);
+        assertEquals(1, evalWithAnswer("sinans", 90), 1e-12);
+        assertEquals(1.5, evalWithAnswer("anssin30", 3), 1e-12);
+    }
+
+    @Test
+    void ansWithoutAnAnswerPointsAtItsLetters() {
+        InvalidExpressionException e =
+                assertThrows(InvalidExpressionException.class, () -> eval("2+ans"));
+        assertEquals("ans needs a solved line above it", e.getMessage());
+        assertFalse(e.isUndefined());
+        assertEquals(2, e.getStart());
+        assertEquals(5, e.getEnd());
+    }
+
+    @Test
+    void ansIsWrittenOutAsANumber() {
+        assertEquals("36÷4", new Expression("ans÷4", 36.0).withAnsWrittenAs("36"));
+        assertEquals("√9+sin30", new Expression("√ans+sin30", 9.0).withAnsWrittenAs("9"));
+    }
+
+    @Test
+    void ansWrittenOutIsBracketedWhereItWouldOtherwiseBeMisread() {
+        assertEquals("2(3)", new Expression("2ans", 3.0).withAnsWrittenAs("3"));
+        assertEquals("(3).5", new Expression("ans.5", 3.0).withAnsWrittenAs("3"));
+        assertEquals("(-3)^2", new Expression("ans^2", -3.0).withAnsWrittenAs("-3"));
+    }
+
+    @Test
+    void lettersThatOnlyLookLikeAnsAreLeftAlone() {
+        assertEquals("tansin30", new Expression("tansin30").withAnsWrittenAs("1"));
+    }
 }
